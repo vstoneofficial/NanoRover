@@ -47,7 +47,6 @@ void checkPenUpDown();
 
 uint8_t isRoverRunning();
 int8_t c2ToHex(int i);
-void setLedByUserProg();
 
 void IRAM_ATTR onTimer();
 void setupInterruptTimer();

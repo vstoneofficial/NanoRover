@@ -11,6 +11,9 @@
 
 #define POS_OF_I2CADDR 1
 
+SemaphoreHandle_t xMutexHandle = NULL;
+const TickType_t  xTicksToWait = portTICK_RATE_MS; //セマフォ取得待機時間1ms
+
 
 /**
  * メモリマップ初期値(0x10~0xff) 

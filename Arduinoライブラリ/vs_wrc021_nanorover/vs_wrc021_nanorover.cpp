@@ -47,11 +47,9 @@ void resetSequence(){
   setO_EN(OFF_OFF);
   pen_status = 0x02;
   wrc021.sendWriteMap();
-  resetMoveTo();
   delay(5);
   wrc021.u8Map(MU8_TRIG, wrc021.u8Map(MU8_TRIG) | 0x80);
   wrc021.u8Map(MU8_TRIG, wrc021.u8Map(MU8_TRIG) | 0x20);
-  clearWaypoint();
   resetOdom();
   delay(5);
   wrc021.sendWriteMap();
@@ -60,12 +58,8 @@ void resetSequence(){
   delay(10);
   wrc021.u8Map(MU8_TRIG, wrc021.u8Map(MU8_TRIG) | 0x10);
   delay(10);
-  moveTo();
-  delay(10);
   wrc021.s32Map(MS32_A_POS0, 0);
   wrc021.s32Map(MS32_A_POS1, 0);
-  //wrc021.s32Map(MS32_T_POS0, 0);
-  //wrc021.s32Map(MS32_T_POS1, 0);
   wrc021.u8Map(MU8_TRIG, wrc021.u8Map(MU8_TRIG) | 0x0c);
   wrc021.u16Map(MU16_A_PCTR, 0);
   wrc021.sendWriteMap();
@@ -116,223 +110,9 @@ int8_t c2ToHex(int i){
     return 0;
   }        
 }
-
-
-//進行方向に合わせてLEDを光らせる
-//アイドル状態なら、白を明滅させる
-void setLedByUserProg(){
-
-  //stdLedColor.number != 0xff and != 0x00なら機能使用しない
-  if(stdLedColor.number != 0xff && stdLedColor.number != 0x00){
-    return;
-  }
-
-  static int runCounter = 0;
-  if(runCounter < 0){
-    runCounter++;
-    return;
-  }else{
-    runCounter = 0;
-  }
-
-  double power = 0.0;
-  static int idlingPower = 128;
-  int i;
-  ledColor led;
-  
-  //ユーザープログラム実行中でないかつ、stdLedColor.number == 0x00ならアイドル中
-  if(!(wrc021.u8Map(MU8_A_EN) & 0x01) && stdLedColor.number == 0x00){
-    if(idlingPower < 192){
-      idlingPower += 1;
-    }else{
-      idlingPower = 64;
-    }
-
-    if(idlingPower < 128){
-      power = idlingPower;
-    }else{
-      power = 255.0 - idlingPower;
-    }
-
-    power /= 128.0;
-
-    led.r = (uint8_t)(64.0*power*power*power*power);
-    led.g = (uint8_t)(64.0*power*power*power*power);
-    led.b = (uint8_t)(64.0*power*power*power*power);
-
-    for(i = 1; i < 9; i++){
-      led.number = i;
-      setLedColor(led);
-    }
-
-    led.r = (uint8_t)((double)0xff*power*power*power*power);
-    led.g = (uint8_t)((double)0xff*power*power*power*power);
-    led.b = (uint8_t)((double)0xff*power*power*power*power);
-    led.number = 0;
-
-    setLedColor(led);
-
-    return;
-  }
-  idlingPower = 0;
-
-  //位置制御中でなければリターン
-  if(wrc021.u8Map(MU8_P_STTS) == 0x00){
-    return;
-  }
-
-  //stdLedColor.number != 0xffなら
-  if(stdLedColor.number != 0xff){
-    return;
-  }
-
-  //現在の進行方向を判定
-  double d_speed = e_run_speed[M_L] + e_run_speed[M_R];
-  const double threshold = 10.0;
-  uint8_t roverDirection = 0; //0->stop / 1->forward / 2->left / 3->right / 4->back
-  static uint8_t oldRoverDirection = 0;
-  if(e_run_speed[M_L] > 0.0 && e_run_speed[M_R] < 0.0){
-    if(d_speed < -threshold){
-      //左旋回
-      roverDirection = 2;
-    }else if(d_speed > threshold){
-      //右旋回
-      roverDirection = 3;
-    }else{
-      //前進
-      roverDirection = 1;
-    }
-  }else if(e_run_speed[M_L] < 0.0 && e_run_speed[M_R] < 0.0){
-    //左旋回（r < d）
-    roverDirection = 2;
-  }else if(e_run_speed[M_L] > 0.0 && e_run_speed[M_R] > 0.0){
-    //右旋回（r < d）
-    roverDirection = 3;
-  }else if(e_run_speed[M_L] < 0.0 && e_run_speed[M_R] > 0.0){
-    if(d_speed < -threshold){
-      //右旋回
-      roverDirection = 3;
-    }else if(d_speed > threshold){
-      //左旋回
-      roverDirection = 2;
-    }else{
-      //後進
-      roverDirection = 4;
-    }
-  }
-
-  //roverDirectionに合わせてLEDを順に標準色で点灯する
-  //LED[1-4] : 右列　LED[5-8] ： 左列
-  //
-  static int LPower = 0;
-  static int RPower = 0;
-
-  if(roverDirection != oldRoverDirection){
-    if(roverDirection == 1){
-      RPower = 0;
-      LPower = 0;
-    }else if(roverDirection == 2){
-      RPower = 0;
-      LPower = 0;
-    }else if(roverDirection == 3){
-      RPower = 0;
-      LPower = 0;
-    }else if(roverDirection == 4){
-      RPower = 512;
-      LPower = 512;
-    }
-  }
-  oldRoverDirection = roverDirection;
-
-  if(roverDirection == 1){
-    if(RPower >= 512){
-      RPower = 0;
-    }
-    if(LPower >= 512){
-      LPower = 0;
-    }
-    RPower += 4;
-    LPower += 4;
-  }else if(roverDirection == 2){
-    if(LPower < 512){
-      LPower += 4;
-    }else{
-      RPower = 0;
-      LPower = 0;
-    }
-    
-  }else if(roverDirection == 3){
-    if(RPower < 512){
-      RPower += 4;
-    }else{
-      RPower = 0;
-      LPower = 0;
-    }
-  }else if(roverDirection == 4){
-    if(RPower <= 0){
-      RPower = 512;
-    }
-    if(LPower <= 0){
-      LPower = 512;
-    }
-    RPower -= 4;
-    LPower -= 4;
-  }
-
-  //右列制御
-  
-  
-  for(i = 4; i > 0; i--){
-    power = RPower - (4-i)*128;
-    if(power < 0.0){
-      power = 0.0;
-    }else if(power > 128.0){
-      power = 128.0;
-    }
-    power /= 128.0;
-
-    if(roverDirection == 4){
-      power = 1.0 - power;
-    }
-
-    led.number = i;
-    led.r = (uint8_t)((double)stdLedColor.r*power*power*power*power);
-    led.g = (uint8_t)((double)stdLedColor.g*power*power*power*power);
-    led.b = (uint8_t)((double)stdLedColor.b*power*power*power*power);
-
-    
-    
-
-    setLedColor(led);
-  }
   
 
-  //左列制御
 
-  
-  for(i = 5; i < 9; i++){
-    power = LPower - (i-5)*128;
-    if(power < 0.0){
-      power = 0.0;
-    }else if(power > 128.0){
-      power = 128.0;
-    }
-    power /= 128.0;
-
-    if(roverDirection == 4){
-      power = 1.0 - power;
-    }
-
-    led.number = i;
-    led.r = (uint8_t)((double)stdLedColor.r*power*power*power*power);
-    led.g = (uint8_t)((double)stdLedColor.g*power*power*power*power);
-    led.b = (uint8_t)((double)stdLedColor.b*power*power*power*power);
-
-    setLedColor(led);
-  }
-  
-
-}
 
 
 /*******************************************

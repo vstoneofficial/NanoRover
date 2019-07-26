@@ -349,9 +349,6 @@ void resetOdom(){
   old_enc[M_R] = 0;
   enc[M_L] = 0;
   enc[M_R] = 0;
-  prev_e_v_com[M_L] = 0.0;
-  prev_e_v_com[M_R] = 0.0;
-
 
   //b7クリアフラグを折り、M_POS,T_POSのクリアフラグを建てる
   wrc021.write1Byte(MU8_TRIG, 0x0c);

@@ -184,6 +184,10 @@ void setup()
   
   delay(100);
 
+  //エンコーダの初期化
+  clearEnc();
+  delay(50);
+
 
 }
 

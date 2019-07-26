@@ -27,8 +27,6 @@
 #define R_MS32(x) (*(int32_t  *)(&wrc021.memMap[x]))
 
 
-extern SemaphoreHandle_t xMutexI2C; //I2C通信の排他制御セマフォ
-extern SemaphoreHandle_t xMutexSerial; //シリアル通信の排他制御セマフォ
 extern SemaphoreHandle_t xMutexHandle;
 extern const TickType_t  xTicksToWait; //セマフォ取得待機時間1ms
 
