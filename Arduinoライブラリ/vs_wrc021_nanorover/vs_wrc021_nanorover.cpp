@@ -184,7 +184,7 @@ void sync(void *pvParameters){
     //スタートスイッチが押されていたら
     static uint32_t pushSwitchTime = millis();
     static uint32_t upSwitchTime   = millis();
-    wrc021.readMemmap(0x7f, 1);
+    
     if(wrc021.u8Map(0x7f) == 0x01){
 
       //チャタリング対策(前回離されてから300ms以内なら押しっぱなしと判定)
@@ -220,9 +220,12 @@ void sync(void *pvParameters){
       //Serial.println("Remove");
     
     }
+    
 
     if(isInterrupt){
       isInterrupt = false;
+
+      wrc021.readMemmap(0x7f, 1);
 
       resetOdom();
 

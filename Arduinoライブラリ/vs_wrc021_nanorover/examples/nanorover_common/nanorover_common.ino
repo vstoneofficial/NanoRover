@@ -1,6 +1,6 @@
 /**
  * スケッチ名：nanorover_common
- * バージョン：1.00
+ * バージョン：1.01
  * 概要：
  * 　ナノローバーを外部のデバイスから制御する際に汎用的に使用可能なスケッチです。
  * 　
@@ -56,16 +56,12 @@
 #include <vs_wrc021_ros.h>
 #include <std_msgs/String.h>
 #include <geometry_msgs/Twist.h>
-#include <std_msgs/MultiArrayLayout.h>
-#include <std_msgs/MultiArrayDimension.h>
-#include <std_msgs/Int16MultiArray.h>
 
 /*******************************************
  * プロトタイプ宣言
  */
 void twistCallBack(const geometry_msgs::Twist& );
 void setRoverOdo();
-void setRoverSensor(Wrc021*);
 void LED(int cmd);
 
 
@@ -88,9 +84,7 @@ const uint16_t serverPort = 11411;       //rosserial socket serverのポート�
  */
 ros::NodeHandle nh;     //ノードハンドル
 
-std_msgs::Int16MultiArray rover_sensor;
 geometry_msgs::Twist rover_odo;
-ros::Publisher pub_sensor("rover_sensor", &rover_sensor);
 ros::Publisher pub_odo("rover_odo", &rover_odo);
 ros::Subscriber<geometry_msgs::Twist> sub_twist("rover_twist", &twistCallBack);
 
@@ -119,49 +113,19 @@ void setup()
   stdLedColor.g      = 23;
   stdLedColor.b      = 23;
   
- 
+  
 
   //[ROS]接続モード別設定値の設定
   #if (WRC021_ROS_SERIAL_MODE == MODE_WIFI)
     // using ROS over Wi-Fi
     nh.getHardware()->setConnection(ROSserver, serverPort);
-    //Serial.begin(115200);
-    Serial.begin(115200)
+    Serial.begin(115200);
   #else
     // using ROS via USB-Serial or do not use ROS
-    nh.getHardware()->setBaud(115200); 
-    //nh.getHardware()->setBaud(230400);
+    nh.getHardware()->setBaud(115200);
+    nh.getHardware()->setRead(readMsg4ROS); 
   #endif
 
-  //[ROS]ros serial初期設定
-  nh.initNode();  //MODE_SERIAL or MODE_OFFの場合、この内部でSerail.begin()が行われます
-
-  //[ROS]publish & subscribeの設定
-  nh.advertise(pub_sensor);
-  nh.advertise(pub_odo);
-  nh.subscribe(sub_twist);
-
-  //[ROS]センサメッセージのメモリ領域確保
-  rover_sensor.data_length = 10;
-  rover_sensor.data = (int16_t *)malloc(sizeof(int16_t)*rover_sensor.data_length);
-
-
-  delay(10);
-
-  
-
-  //I2Cセットアップ
-  i2cMasterInit();
-
-  //SPI(VS-C3)セットアップ
-  //spiInit();
-
-  //メモリマップ初期化
-  wrc021.initMemmap(8.0);
-
-  loadUserProgramOnWakeUp();
-  delay(1000);  
- 
   //各無線通信機能のセットアップ
   #if (WRC021_WIRELESS_MODE == USE_WIFI)
     wifiInit((char* )ssid, (char* )password);
@@ -174,13 +138,29 @@ void setup()
 
   delay(50);
 
+  //[ROS]ros serial初期設定
+  nh.initNode();  //MODE_SERIAL or MODE_OFFの場合、この内部でSerail.begin()が行われます
+
+  //[ROS]publish & subscribeの設定
+  nh.advertise(pub_odo);
+  nh.subscribe(sub_twist);
+
+  delay(10);
+
+
+  //I2Cセットアップ
+  i2cMasterInit();
+
+  //メモリマップ初期化
+  wrc021.initMemmap(8.0);
+
   wrc033LedInit();
 
   //Syncタスクセットアップ
   delay(200);
 
   setupInterruptTimer(); 
-  setUpSync();
+  //setUpSync();
   
   delay(100);
 
@@ -199,15 +179,11 @@ void loop(){
 
   int code = NO_INPUT;    //状態判定のためのコード
 
-  BaseType_t xStatus;
-  xStatus = xSemaphoreTake(xMutexHandle, xTicksToWait);
-
-  if(xStatus == pdTRUE){
 
   if(Serial.available()){                                                                //シリアル入力があった場合、
     code = SERIAL_ACCES;                                                                //状態コードをSERIAL_ACCESとする。
     
-    if(!readMsgViaSerial()){                                                          //シリアル入力を解釈する。
+    if(!persMsgViaSerial()){                                                          //シリアル入力を解釈する。
       //無効なシリアルアクセス                                                          //
       code = NO_INPUT;                                                                //無効なシリアルアクセスであった場合は状態コードをNO_INPUTとする
     }
@@ -215,7 +191,7 @@ void loop(){
   }else if(WRC021_ROS_SERIAL_MODE == MODE_WIFI && WiFi.status() == WL_CONNECTED){       //Wi-Fi接続でROSを使用し、Wi-Fiアクセスポイントとの接続が確立していて、
     if(millis() - spinOnceInterval > 10){                                               //かつ前回の処理から10ms以上経過していた場合、
       spinOnceInterval = millis();                                                      //
-      if(nh.spinOnce() != -1){                                                          //ros_spinOnce()を実行し
+      if(nh.spinOnce() == 0){                                                          //ros_spinOnce()を実行し
         //ROSからの指令値取得                                                             //ROSからの指令値であれば
         code = ROS_CTRL;                                                                //状態コードをROS_CTRLとする
       }
@@ -244,20 +220,81 @@ void loop(){
     }
   }
 
+  if(WRC021_ROS_SERIAL_MODE == MODE_SERIAL /*&& !rcvMsg4ROS.empty()*/){                     //rosserialを有線シリアル接続で使用するなら
+    spinOnceInterval = millis();                                                      //
+    if(nh.spinOnce() == 0){                                                          //spinOnceを実行する
+      //ROSからの指令値取得                                                             //ROSからの指令値であれば
+      code = ROS_CTRL;                                                                //状態コードをROS_CTRLとする。
+    }
+  }
+
+
+  //スタートスイッチが押されていたら
+  static uint32_t pushSwitchTime = millis();
+  static uint32_t upSwitchTime   = millis();
+    
+    if(wrc021.u8Map(0x7f) == 0x01){
+
+      //チャタリング対策(前回離されてから300ms以内なら押しっぱなしと判定)
+      if(millis() - upSwitchTime > 300){
+
+        int blinkCount = 0;
+        for(blinkCount = 0; blinkCount < 5; blinkCount++){
+          delay(20);
+          setLedColor(blackTop);
+          wrc033.sendWriteMap();
+          delay(20);
+          setLedColor(orangeTop);
+          wrc033.sendWriteMap();
+        }
+
+        pushSwitchTime = millis();
+
+      }
+
+      //3秒以上長押しで電源OFF
+      while(wrc021.u8Map(0x7f) == 0x01){
+        wrc021.readMemmap(0x7f, 1);
+        if(millis() - pushSwitchTime >= 3000 && !((millis() - pushSwitchTime)%5)){
+          changeLed2TurnOff();
+        }
+      }
+
+      upSwitchTime = millis();
+    
+    }
+    
+
+    if(isInterrupt){
+      isInterrupt = false;
+
+      wrc021.readMemmap(0x7f, 1);
+
+      resetOdom();
+
+      checkPenUpDown();
+
+      memCom2V();
+      posControl();
+
+      //ESP32のメモリマップのうち、書込み要求のあったものをSTM32のメモリマップへ送信する
+      wrc021.sendWriteMap();                //メモリマップの送信を実行する  
+
+      //ESP32のLED用メモリマップのうち、書込み要求のあったものをWRC033に送信する
+      wrc033.sendWriteMap();
+
+    }
+
   //ROSメッセージの送信
   if(WRC021_ROS_SERIAL_MODE != MODE_OFF && nh.connected()){
     if(millis() - publishInterval > 10){
       publishInterval = millis();
       setRoverOdo();
-      setRoverSensor( &wrc021);
       pub_odo.publish( &rover_odo);
-      pub_sensor.publish( &rover_sensor);
     }
   }
 
-  }
-  xSemaphoreGive(xMutexHandle);
-  vTaskDelay(portTICK_RATE_MS*2);
+  delay(1);
 
 }
 
@@ -265,10 +302,9 @@ void loop(){
  * ROSメッセージ rover_twist のコールバック
  */ 
 void twistCallBack(const geometry_msgs::Twist& msg){
-  v_com[M_R] = (msg.linear.x + ROVER_D*msg.angular.z);	//右車輪速度
-	v_com[M_L] = -1.0*(msg.linear.x - ROVER_D*msg.angular.z);	//左車輪速度
-  setCtrlMode(MODE_PWM);
-  setO_EN(ON_ON);
+  wrc021.s16Map(MS16_S_XS, (int16_t)(msg.linear.x*1000));
+  wrc021.s16Map(MS16_S_ZS, (int16_t)(msg.angular.z*1000));
+
   return;
 }
 
@@ -276,23 +312,12 @@ void twistCallBack(const geometry_msgs::Twist& msg){
  * ROSメッセージ rover_odo へのオドメトリ情報の入力
  */
 void setRoverOdo(){
-  rover_odo.linear.x  = ((avr_v[M_R] + (-1.0*avr_v[M_L]))/2.0);
-  rover_odo.angular.z = ((avr_v[M_R] - (-1.0*avr_v[M_L]))/(2.0*ROVER_D));
+  rover_odo.linear.x  = ((-1.0*avr_v[M_R] + (avr_v[M_L]))/2.0);
+  rover_odo.angular.z = ((-1.0*avr_v[M_R] - (avr_v[M_L]))/(2.0*ROVER_D));
   return;
 }
 
-/*******************************************
- * ROSメッセージ rover_sensor へのセンサ入力情報の入力
- */
-void setRoverSensor(Wrc021* memmap){
-  memmap->readMemmap(MU16_M_DI, 20);
 
-  int i;
-  for(i = 0; i < 10; i++){
-    rover_sensor.data[i] = memmap->u16Map(MU16_M_DI + (i*2));
-  }
-  return;
-}
 
 
 

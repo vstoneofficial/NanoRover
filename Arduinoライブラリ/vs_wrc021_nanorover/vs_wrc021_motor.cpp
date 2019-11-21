@@ -9,7 +9,7 @@
 #include <cstdint>
 
 double  ctl_v_com[2] = {0.0, 0.0};//制御器からの速度指令値
-double   v_com[2];    //左右輪の速度指令値
+double  v_com[2];    //左右輪の速度指令値
 int16_t m_com[2];    //左右モータへの出力指令値
 
 int32_t enc[2] = {0, 0};
@@ -267,6 +267,7 @@ double buf_enc_com[2];  //エンコーダ逐次目標値のストック
 void posControl(){
 
   setCtrlMode(MODE_POS);
+  setO_EN(ON_ON);
   ctl2Vcom();
   getRoverV();
 
@@ -397,7 +398,7 @@ void penUp(){
     pen_moving_time = millis();
   }
 
-  if(millis() - pen_moving_time < 500){//10//240
+  if(millis() - pen_moving_time < 200){//10//240//500
     penPower = -2200 - ((millis()-pen_moving_time)*5);
     wrc021.write2Byte(MS16_T_OUT2, penPower);
     //delay(2);
@@ -437,7 +438,7 @@ void penDawn(){
     pen_moving_time = millis();
   }
 
-  if(millis() - pen_moving_time < 500){//10//240
+  if(millis() - pen_moving_time < 200){//10//240//500
     penPower = 2200 + ((millis()-pen_moving_time)*5);
     wrc021.write2Byte(MS16_T_OUT2, penPower);
     //delay(2);

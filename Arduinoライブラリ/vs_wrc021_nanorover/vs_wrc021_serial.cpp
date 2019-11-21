@@ -22,7 +22,7 @@ int persMsgViaSerial(){
   static int16_t rosMsgBytes = 0; //ROSコマンドのbyte数　msg_length+8byte
   char tmp;
 
-  //while(Serial.available()){
+  while(Serial.available()){
 
   //バッファ空＝新規コマンドなら先頭文字を取得
   if(rcvMsgViaSerial.empty()){
@@ -97,10 +97,18 @@ int persMsgViaSerial(){
     }
 
     //3次バッファが空ならコピーしてクリア
-    if(rcvMsg4ROS.empty()){
+    if(rcvMsg4ROS.length()+rosMsgBytes < SERIAL_BUF_SIZE){
       std::reverse_copy(rcvMsgViaSerial.begin(), rcvMsgViaSerial.end(), std::back_inserter(rcvMsg4ROS));
       rcvMsgViaSerial.clear();
       rosMsgBytes = 0;
+    
+    //3次バッファが一杯ならクリアしてコピーしてクリア
+    }else{
+      rcvMsg4ROS.clear();
+      std::reverse_copy(rcvMsgViaSerial.begin(), rcvMsgViaSerial.end(), std::back_inserter(rcvMsg4ROS));
+      rcvMsgViaSerial.clear();
+      rosMsgBytes = 0;
+
     }
 
     return return_val;
@@ -111,7 +119,7 @@ int persMsgViaSerial(){
   }
 
 
-  //}
+  }
 
   return return_val;
 
